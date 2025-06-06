@@ -6,8 +6,6 @@ import logging
 from collections import deque
 from typing import Iterable, Tuple, List, Set
 
-import rustworkx as rx
-
 from qiskit.circuit.library.standard_gates import SwapGate
 from qiskit.transpiler.basepasses import TransformationPass
 from qiskit.transpiler.exceptions import TranspilerError
@@ -26,10 +24,6 @@ class FDLSSwap(TransformationPass):
         *Sanjiang Li, Xiangzhen Zhou, Yuan Feng –
         "Qubit Mapping Based on Subgraph Isomorphism and
         Filtered Depth-Limited Search", 2021.*
-
-    Unlike the original paper we **skip the subgraph-isomorphism initial placement** and
-    start from whatever layout the previous pass produced.  Only the routing phase
-    (SWAP insertion) is implemented here.
     """
 
     def __init__(
