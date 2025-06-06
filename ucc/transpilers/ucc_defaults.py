@@ -29,6 +29,8 @@ from qiskit.transpiler.passes import (
     Optimize1qGatesDecomposition,
     VF2PostLayout,
 )
+
+from routing_algos.FDLSswap import FDLSSwap
 from typing import Optional
 
 
@@ -123,6 +125,68 @@ class UCCDefault1:
     def run(self, circuits):
         return self.pass_manager.run(circuits)
 
+class UCCfdls(UCCDefault1):
+    def __init__(
+        self, local_iterations: int = 1, target_device: Optional[Target] = None
+    ):
+        """
+        Create a new instance of UCCDefault1 compiler
+
+            Args:
+                local_iterations (int): Number of times to run the local passes
+                target_device (qiskit.transpiler.Target): (Optional) The target device to compile the circuit for
+        """
+
+        super().__init__(local_iterations=local_iterations, target_device=target_device)
+        
+
+    @property
+    def default_passes(self):
+        return
+
+
+    def _add_map_passes(self, target_device: Optional[Target] = None):
+        if target_device is not None:
+            coupling_map = target_device.build_coupling_map()
+
+            # --- 1 · Choose a (good-enough) initial placement -----------------
+            self.pass_manager.append(
+                SabreLayout(
+                    coupling_map,
+                    seed=1,
+                    max_iterations=4,
+                    swap_trials=_get_trial_count(20),
+                    layout_trials=_get_trial_count(20),
+                )
+            )
+            self.pass_manager.append(VF2Layout(target=target_device))
+            self.pass_manager.append(ApplyLayout())
+
+            # --- 2 · Route with Filtered Depth-Limited Search -----------------
+            #     (replaces the old SabreSwap pass)
+            self.pass_manager.append(
+                FDLSSwap(
+                    coupling_map,
+                    depth_limit=3,        # k  – max swaps per search
+                    lookahead_layers=2,   # h  – Qᵢ filter horizon
+                    ds_discount=0.95,     # λ  – distance-metric discount
+                    seed=1,               # deterministic tie-breaks
+                )
+            )
+
+            # --- 3 · Optional post-layout clean-ups ---------------------------
+            self.pass_manager.append(VF2PostLayout(target=target_device))
+            self.pass_manager.append(ApplyLayout())
+
+            # Any custom local optimisations you already had
+            self._add_local_passes(1)
+
+            # Final VF2 pass to tighten things even more
+            self.pass_manager.append(VF2PostLayout(target=target_device))
+            self.pass_manager.append(ApplyLayout())
+
+    def run(self, circuits):
+        return self.pass_manager.run(circuits)
 
 def _get_trial_count(default_trials=5):
     if CONFIG.get("sabre_all_threads", None) or os.getenv(
