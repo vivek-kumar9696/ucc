@@ -30,7 +30,7 @@ from qiskit.transpiler.passes import (
     VF2PostLayout,
 )
 
-from routing_algos.FDLSswap import FDLSSwap
+from ..routing_algos.FDLSswap import FDLSSwap
 from typing import Optional
 
 
@@ -167,9 +167,9 @@ class UCCfdls(UCCDefault1):
             self.pass_manager.append(
                 FDLSSwap(
                     coupling_map,
-                    depth_limit=3,        # k  – max swaps per search
-                    lookahead_layers=2,   # h  – Qᵢ filter horizon
-                    ds_discount=0.95,     # λ  – distance-metric discount
+                    depth_limit=5,        # k  – max swaps per search
+                    lookahead_layers=5,   # h  – Qᵢ filter horizon
+                    ds_discount=0.99,     # λ  – distance-metric discount
                     seed=1,               # deterministic tie-breaks
                 )
             )

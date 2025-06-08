@@ -13,6 +13,7 @@ from qiskit.transpiler.layout import Layout
 from qiskit.dagcircuit import DAGCircuit, DAGOpNode
 from qiskit.transpiler.coupling import CouplingMap
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -55,6 +56,7 @@ class FDLSSwap(TransformationPass):
             raise TranspilerError("FDLSSwap expects a physical circuit with a single qreg.")
 
         canonical_qreg = dag.qregs["q"]
+        self._canonical_qreg = canonical_qreg
         current_layout = Layout.generate_trivial_layout(canonical_qreg)  # physical == virtual idx
         out_dag = dag.copy_empty_like()
 
@@ -66,12 +68,16 @@ class FDLSSwap(TransformationPass):
             # --------------------------------------------------------------
             executed_any = False
             executable_nodes = [
-                n for n in list(front_layer) if self._gate_executable(n, current_layout)
-            ]
+                n for n in list(front_layer)
+                    if isinstance(n, DAGOpNode)                  # ← new guard
+                        and self._gate_executable(n, current_layout)
+]
             for node in executable_nodes:
                 self._apply_physical_op(out_dag, node, current_layout)
                 front_layer.remove(node)
-                front_layer.extend(dag.successors(node))
+                for succ in dag.successors(node):
+                    if isinstance(succ, DAGOpNode) and succ not in front_layer:
+                        front_layer.append(succ)
                 dag.remove_op_node(node)
                 executed_any = True
 
@@ -112,9 +118,18 @@ class FDLSSwap(TransformationPass):
 
     def _apply_physical_op(self, out_dag, node, layout):
         """Copy `node` to `out_dag` with physical qubits substituted."""
-        phys_qargs = tuple(layout[q] for q in node.qargs)
-        new_node = DAGOpNode.from_instruction(node.op, qargs=phys_qargs, cargs=node.cargs)
-        out_dag._apply_op_node_back(new_node, check=False)
+        phys_qargs = []
+        for virt_q in node.qargs:
+            phys_idx = layout[virt_q]          # int
+            try:
+                phys_q = self._canonical_qreg[phys_idx]  # Qubit
+            except IndexError:                  # just in case
+                raise TranspilerError(
+                    f"Layout maps to idx {phys_idx}, but register has size {len(self._canonical_qreg)}"
+                )
+            phys_qargs.append(phys_q)
+        #new_node = DAGOpNode.from_instruction(node.op, qargs=phys_qargs, cargs=node.cargs)
+        out_dag.apply_operation_back(node.op, phys_qargs, node.cargs, check=False)
 
     # ---------------------------------------------------------------------
     # FDLS core
