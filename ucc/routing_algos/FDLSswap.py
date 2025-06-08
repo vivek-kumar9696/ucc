@@ -30,9 +30,9 @@ class FDLSSwap(TransformationPass):
     def __init__(
         self,
         coupling_map: CouplingMap,
-        lookahead_layers: int = 2,
-        depth_limit: int = 3,
-        ds_discount: float = 0.95,
+        lookahead_layers: int = 5,
+        depth_limit: int = 5,
+        ds_discount: float = 0.99,
         seed: int | None = None,
     ):
         super().__init__()
@@ -266,26 +266,3 @@ class FDLSSwap(TransformationPass):
 
         return after <= before * self.lmbd
 
-
-# ---------------------------------------------------------------------------
-# EXAMPLE USAGE
-# ---------------------------------------------------------------------------
-#
-# from qiskit import QuantumCircuit, transpile
-# from qiskit.transpiler import PassManager
-# from qiskit.transpiler.passes import SetLayout
-# from qiskit.transpiler.coupling import CouplingMap
-#
-# circ = QuantumCircuit(5)
-# circ.cx(0, 1)
-# circ.cx(2, 3)
-# circ.cx(3, 4)
-# circ.cx(1, 2)
-#
-# cmap = CouplingMap.from_line(5)
-# passmanager = PassManager([
-#     SetLayout(Layout.generate_trivial_layout(circ.qregs["q"])),
-#     FDLSSwap(cmap)
-# ])
-# mapped = passmanager.run(circ)
-# print(mapped)
