@@ -39,7 +39,7 @@ CONFIG = user_config.get_config()
 
 class UCCDefault1:
     def __init__(
-        self,seed, depth_limit, lookahead_layers, ds_discount, 
+        self,seed = 1, depth_limit = 5, lookahead_layers = 5, ds_discount = 5, 
             local_iterations: int = 1, target_device: Optional[Target] = None
     ):
         """
