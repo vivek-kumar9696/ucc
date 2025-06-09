@@ -21,7 +21,6 @@ from qiskit.transpiler.passes import (
     HighLevelSynthesis,
     HLSConfig,
     SabreLayout,
-    SabreSwap,
     VF2Layout,
     CommutativeCancellation,
     Collect2qBlocks,
