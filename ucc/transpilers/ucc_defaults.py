@@ -38,8 +38,12 @@ CONFIG = user_config.get_config()
 
 class UCCDefault1:
     def __init__(
-        self,seed = 1, depth_limit = 5, lookahead_layers = 5, ds_discount = 5, 
-            local_iterations: int = 1, target_device: Optional[Target] = None
+        self,
+        depth_limit=5,
+        lookahead_layers=5,
+        ds_discount=5,
+        local_iterations: int = 1,
+        target_device: Optional[Target] = None,
     ):
         """
         Create a new instance of UCCDefault1 compiler
@@ -55,7 +59,6 @@ class UCCDefault1:
         self.depth_limit = depth_limit
         self.lookahead_layers = lookahead_layers
         self.ds_discount = ds_discount
-        self.seed = seed
 
         self.special_commutations = {
             ("rx", "cx"): {
@@ -83,15 +86,11 @@ class UCCDefault1:
             self.pass_manager.append(
                 UnitarySynthesis(basis_gates=self.target_basis)
             )
-            # self.pass_manager.append(Optimize1qGatesDecomposition(basis=self._1q_basis))
+
             self.pass_manager.append(CollectCliffords())
             self.pass_manager.append(
                 HighLevelSynthesis(hls_config=HLSConfig(clifford=["greedy"]))
             )
-
-            # Add following passes if merging single qubit rotations that are interrupted by a commuting 2 qubit gate is desired
-            # self.pass_manager.append(Optimize1qGatesSimpleCommutation(basis=self._1q_basis))
-            # self.pass_manager.append(BasisTranslator(sel, target_basis=self.target_basis))
 
     def _add_map_passes(self, target_device: Optional[Target] = None):
         if target_device is not None:
@@ -115,10 +114,9 @@ class UCCDefault1:
             self.pass_manager.append(
                 FDLSSwap(
                     coupling_map,
-                    self.depth_limit,        # k  – max swaps per search
-                    self.lookahead_layers,   # h  – Qᵢ filter horizon
-                    self.ds_discount,     # λ  – distance-metric discount
-                    self.seed,               # deterministic tie-breaks
+                    self.depth_limit,
+                    self.lookahead_layers,
+                    self.ds_discount,
                 )
             )
 

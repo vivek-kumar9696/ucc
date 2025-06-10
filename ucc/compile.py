@@ -56,8 +56,7 @@ def compile(
 
     # Translate to Qiskit Circuit object
     qiskit_circuit = translate(circuit, "qiskit")
-    ucc_default1 = UCCDefault1(seed = 1, lookahead_layers = 5, depth_limit = 5, ds_discount = 0.99, 
-                               target_device=target_device)
+    ucc_default1 = UCCDefault1(target_device=target_device)
 
     if custom_passes is not None:
         ucc_default1.pass_manager.append(custom_passes)

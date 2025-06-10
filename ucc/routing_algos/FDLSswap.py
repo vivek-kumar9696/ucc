@@ -30,10 +30,9 @@ class FDLSSwap(TransformationPass):
     def __init__(
         self,
         coupling_map: CouplingMap,
-        lookahead_layers: int = 5,
-        depth_limit: int = 5,
-        ds_discount: float = 0.99,
-        seed: int | None = None,
+        lookahead_layers: int = 5,  # 𝒉 : how many future layers (Qᵢ horizon) we peek at
+        depth_limit: int = 5,  # 𝒌 : maximum length of the SWAP chain explored per search
+        ds_discount: float = 0.99,  # λ : discount factor for the Dₛ distance filter (< 1 penalises bad swaps)
     ):
         super().__init__()
         self.coupling_map = coupling_map
@@ -42,7 +41,6 @@ class FDLSSwap(TransformationPass):
         self.k = depth_limit
         self.h = lookahead_layers
         self.lmbd = ds_discount
-        self.seed = seed
         self._swap_gate = SwapGate()
 
     # ---------------------------------------------------------------------
@@ -53,11 +51,15 @@ class FDLSSwap(TransformationPass):
             raise TranspilerError("FDLSSwap requires a CouplingMap.")
 
         if len(dag.qregs) != 1 or "q" not in dag.qregs:
-            raise TranspilerError("FDLSSwap expects a physical circuit with a single qreg.")
+            raise TranspilerError(
+                "FDLSSwap expects a physical circuit with a single qreg."
+            )
 
         canonical_qreg = dag.qregs["q"]
         self._canonical_qreg = canonical_qreg
-        current_layout = Layout.generate_trivial_layout(canonical_qreg)  # physical == virtual idx
+        current_layout = Layout.generate_trivial_layout(
+            canonical_qreg
+        )  # physical == virtual idx
         out_dag = dag.copy_empty_like()
 
         front_layer = deque(dag.front_layer())
@@ -68,10 +70,11 @@ class FDLSSwap(TransformationPass):
             # --------------------------------------------------------------
             executed_any = False
             executable_nodes = [
-                n for n in list(front_layer)
-                    if isinstance(n, DAGOpNode)                  # ← new guard
-                        and self._gate_executable(n, current_layout)
-]
+                n
+                for n in list(front_layer)
+                if isinstance(n, DAGOpNode)  # ← new guard
+                and self._gate_executable(n, current_layout)
+            ]
             for node in executable_nodes:
                 self._apply_physical_op(out_dag, node, current_layout)
                 front_layer.remove(node)
@@ -88,8 +91,9 @@ class FDLSSwap(TransformationPass):
             # 2.  Need SWAPs – run FDLS to pick the best short sequence.
             # --------------------------------------------------------------
             swap_seq = self._best_fdls_swap_sequence(
-                current_layout, front_layer, depth_limit=self.k, lookahead=self.h
+                current_layout, front_layer
             )
+
             if not swap_seq:
                 raise TranspilerError(
                     "FDLS could not find any swap sequence – are device and circuit sizes compatible?"
@@ -99,7 +103,10 @@ class FDLSSwap(TransformationPass):
                 # Update layout *and* write SWAP to output DAG.
                 current_layout.swap(a, b)
                 out_dag.apply_operation_back(
-                    self._swap_gate, (canonical_qreg[a], canonical_qreg[b]), (), check=False
+                    self._swap_gate,
+                    (canonical_qreg[a], canonical_qreg[b]),
+                    (),
+                    check=False,
                 )
 
         return out_dag
@@ -120,29 +127,27 @@ class FDLSSwap(TransformationPass):
         """Copy `node` to `out_dag` with physical qubits substituted."""
         phys_qargs = []
         for virt_q in node.qargs:
-            phys_idx = layout[virt_q]          # int
+            phys_idx = layout[virt_q]  # int
             try:
                 phys_q = self._canonical_qreg[phys_idx]  # Qubit
-            except IndexError:                  # just in case
+            except IndexError:  # just in case
                 raise TranspilerError(
                     f"Layout maps to idx {phys_idx}, but register has size {len(self._canonical_qreg)}"
                 )
             phys_qargs.append(phys_q)
-        #new_node = DAGOpNode.from_instruction(node.op, qargs=phys_qargs, cargs=node.cargs)
-        out_dag.apply_operation_back(node.op, phys_qargs, node.cargs, check=False)
+        # new_node = DAGOpNode.from_instruction(node.op, qargs=phys_qargs, cargs=node.cargs)
+        out_dag.apply_operation_back(
+            node.op, phys_qargs, node.cargs, check=False
+        )
 
     # ---------------------------------------------------------------------
     # FDLS core
     # ---------------------------------------------------------------------
     def _best_fdls_swap_sequence(
-        self,
-        layout: Layout,
-        front_layer: Iterable[DAGOpNode],
-        depth_limit: int,
-        lookahead: int,
+        self, layout: Layout, front_layer: Iterable[DAGOpNode]
     ) -> List[Tuple[int, int]]:
         """
-        Return a (possibly empty) **sequence** of ≤ `depth_limit` SWAPs that maximises
+        Return a (possibly empty) **sequence** of ≤ `depth_limit (k)` SWAPs that maximises
 
             g_val = (# front-layer gates enabled) / (3 * num_swaps)
 
@@ -174,14 +179,18 @@ class FDLSSwap(TransformationPass):
                     best_swap_seq = seq
 
             # Depth limit reached?
-            if len(seq) == depth_limit:
+            if len(seq) == self.k:
                 continue
 
             # ----- Generate children (filtered) ------------------------------
             candidate_swaps = self._generate_filtered_swaps(
-                logical_front, seq_layout, front_layer, level=len(seq), lookahead=lookahead
+                logical_front,
+                seq_layout,
+                front_layer,
+                level=len(seq),
+                lookahead=self.h,
             )
-            for (a, b) in candidate_swaps:
+            for a, b in candidate_swaps:
                 new_layout = seq_layout.copy()
                 new_layout.swap(a, b)
                 stack.append((seq + [(a, b)], new_layout))
@@ -198,7 +207,6 @@ class FDLSSwap(TransformationPass):
         logical_front: List[int],
         layout: Layout,
         front_layer: Iterable[DAGOpNode],
-        level: int,
         lookahead: int,
     ) -> Set[Tuple[int, int]]:
         """Return SWAPs that satisfy Q₀, Qᵢ, and Dₛ filters."""
@@ -209,7 +217,9 @@ class FDLSSwap(TransformationPass):
 
         # ----- Qᵢ filter: include look-ahead layers --------------------------
         if lookahead > 0:
-            la_qubits = self._collect_lookahead_qubits(front_layer, depth=lookahead)
+            la_qubits = self._collect_lookahead_qubits(
+                front_layer, depth=lookahead
+            )
             touch.update(layout[q] for q in la_qubits)
 
         # Iterate over all edges of coupling graph that touch those qubits
@@ -252,6 +262,7 @@ class FDLSSwap(TransformationPass):
 
         Here we approximate with the current front only (cheaper but effective).
         """
+
         def total_distance(lay):
             dist = 0
             for node in front_layer:
@@ -265,4 +276,3 @@ class FDLSSwap(TransformationPass):
         after = total_distance(after_layout)
 
         return after <= before * self.lmbd
-
