@@ -95,8 +95,6 @@ class UCCDefault1:
     def _add_map_passes(self, target_device: Optional[Target] = None):
         if target_device is not None:
             coupling_map = target_device.build_coupling_map()
-
-            # --- 1 · Choose a (good-enough) initial placement -----------------
             self.pass_manager.append(
                 SabreLayout(
                     coupling_map,
@@ -109,7 +107,7 @@ class UCCDefault1:
             self.pass_manager.append(VF2Layout(target=target_device))
             self.pass_manager.append(ApplyLayout())
 
-            # --- 2 · Route with Filtered Depth-Limited Search -----------------
+            # Route with Filtered Depth-Limited Search
             self.pass_manager.append(
                 FDLSSwap(
                     coupling_map,
@@ -119,7 +117,6 @@ class UCCDefault1:
                 )
             )
 
-            # --- 3 · Optional post-layout clean-ups ---------------------------
             self.pass_manager.append(VF2PostLayout(target=target_device))
             self.pass_manager.append(ApplyLayout())
 
