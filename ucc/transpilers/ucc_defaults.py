@@ -110,7 +110,6 @@ class UCCDefault1:
             self.pass_manager.append(ApplyLayout())
 
             # --- 2 · Route with Filtered Depth-Limited Search -----------------
-            #     (replaces the old SabreSwap pass)
             self.pass_manager.append(
                 FDLSSwap(
                     coupling_map,

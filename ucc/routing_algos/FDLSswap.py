@@ -69,20 +69,20 @@ class FDLSSwap(TransformationPass):
             # 1.  Execute any front-layer gates that are already satisfied.
             # --------------------------------------------------------------
             executed_any = False
-            executable_nodes = [
-                n
-                for n in list(front_layer)
-                if isinstance(n, DAGOpNode)  # ← new guard
-                and self._gate_executable(n, current_layout)
-            ]
-            for node in executable_nodes:
-                self._apply_physical_op(out_dag, node, current_layout)
-                front_layer.remove(node)
-                for succ in dag.successors(node):
-                    if isinstance(succ, DAGOpNode) and succ not in front_layer:
-                        front_layer.append(succ)
-                dag.remove_op_node(node)
-                executed_any = True
+            for node in list(front_layer):
+                if isinstance(node, DAGOpNode) and self._gate_executable(
+                    node, current_layout
+                ):
+                    self._apply_physical_op(out_dag, node, current_layout)
+                    front_layer.remove(node)
+                    for succ in dag.successors(node):
+                        if (
+                            isinstance(succ, DAGOpNode)
+                            and succ not in front_layer
+                        ):
+                            front_layer.append(succ)
+                    dag.remove_op_node(node)
+                    executed_any = True
 
             if executed_any:
                 continue
